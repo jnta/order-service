@@ -19,4 +19,6 @@ public class OrderItems {
     private String skuCode;
     private BigDecimal price;
     private Integer quantity;
+    @ManyToOne
+    private Order order;
 }

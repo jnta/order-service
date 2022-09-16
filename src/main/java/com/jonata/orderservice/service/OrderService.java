@@ -1,7 +1,7 @@
 package com.jonata.orderservice.service;
 
 import com.jonata.orderservice.dto.InventoryResponse;
-import com.jonata.orderservice.dto.OrderItemsDto;
+import com.jonata.orderservice.dto.OrderItemDto;
 import com.jonata.orderservice.dto.OrderRequest;
 import com.jonata.orderservice.dto.OrderResponse;
 import com.jonata.orderservice.model.Order;
@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -33,21 +32,15 @@ public class OrderService {
         Order order = new Order();
         order.setOrderNumber(UUID.randomUUID().toString());
 
-        List<OrderItems> orderItems = orderRequest.getOrderItemsDtoList()
-                .stream().map(this::mapToOrderItems)
+        List<OrderItems> orderItems = orderRequest.getItems()
+                .stream().map(itemDto -> this.mapToOrderItems(itemDto, order))
                 .toList();
 
-        order.setOrderItemsList(orderItems);
+        order.setOrderItems(orderItems);
 
-        List<String> skuCodes = orderItems.stream().map(OrderItems::getSkuCode).toList();
+        InventoryResponse[] inventoryResponseArray = getProductsInInvetory(orderItems);
 
-        InventoryResponse[] inventoryResponseArray = webClient.get()
-                .uri("http://localhost:8082/api/v1/inventory", uriBuilder -> uriBuilder.queryParam("skuCode", skuCodes).build())
-                .retrieve()
-                .bodyToMono(InventoryResponse[].class)
-                .block();
-
-        boolean allProductsInStock = Arrays.stream(inventoryResponseArray).allMatch(InventoryResponse::isInStock);
+        boolean allProductsInStock = isAllProductsInStock(inventoryResponseArray);
 
         if (allProductsInStock) {
             orderRepository.save(order);
@@ -57,22 +50,42 @@ public class OrderService {
 
     }
 
-    private OrderItems mapToOrderItems(OrderItemsDto orderItemsDto) {
+    private InventoryResponse[] getProductsInInvetory(List<OrderItems> orderItems) {
+        List<String> skuCodes = orderItems.stream().map(OrderItems::getSkuCode).toList();
+
+        return webClient.get()
+                .uri("http://localhost:8082/api/v1/inventory",
+                        uriBuilder -> uriBuilder.queryParam("skuCode", skuCodes).build())
+                .retrieve()
+                .bodyToMono(InventoryResponse[].class)
+                .block();
+    }
+
+    private boolean isAllProductsInStock(InventoryResponse[] inventoryResponseArray) {
+        if (inventoryResponseArray.length == 0) {
+            return false;
+        }
+
+        for (InventoryResponse inventoryResponse : inventoryResponseArray) {
+            if (inventoryResponse.isInStock() == false) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private OrderItems mapToOrderItems(OrderItemDto orderItemDto, Order order) {
         var orderItems = new OrderItems();
-        orderItems.setPrice(orderItemsDto.getPrice());
-        orderItems.setQuantity(orderItemsDto.getQuantity());
-        orderItems.setSkuCode(orderItemsDto.getSkuCode());
+        orderItems.setPrice(orderItemDto.getPrice());
+        orderItems.setQuantity(orderItemDto.getQuantity());
+        orderItems.setSkuCode(orderItemDto.getSkuCode());
+        orderItems.setOrder(order);
 
         return orderItems;
     }
 
     public Page<OrderResponse> getAllOrders(Pageable pageable) {
-        return orderRepository.findAll(pageable).map(this::mapToOrderResponse);
+        return orderRepository.findAll(pageable).map(OrderResponse::new);
     }
 
-    private OrderResponse mapToOrderResponse(Order order) {
-        return new OrderResponse(order.getId(),
-                order.getOrderNumber(),
-                order.getOrderItemsList());
-    }
 }
