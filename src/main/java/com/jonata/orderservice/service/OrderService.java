@@ -21,11 +21,11 @@ import java.util.UUID;
 public class OrderService {
 
     private final OrderRepository orderRepository;
-    private final WebClient webClient;
+    private final WebClient.Builder webClientBuilder;
 
-    public OrderService(OrderRepository orderRepository, WebClient webClient) {
+    public OrderService(OrderRepository orderRepository, WebClient.Builder webClientBuilder) {
         this.orderRepository = orderRepository;
-        this.webClient = webClient;
+        this.webClientBuilder = webClientBuilder;
     }
 
     public void placeOrder(OrderRequest orderRequest) {
@@ -45,7 +45,7 @@ public class OrderService {
         if (allProductsInStock) {
             orderRepository.save(order);
         } else {
-            throw new IllegalArgumentException("Product not in Stock! Try again later.");
+            System.out.println("Product not in stock");
         }
 
     }
@@ -53,8 +53,8 @@ public class OrderService {
     private InventoryResponse[] getProductsInInvetory(List<OrderItems> orderItems) {
         List<String> skuCodes = orderItems.stream().map(OrderItems::getSkuCode).toList();
 
-        return webClient.get()
-                .uri("http://localhost:8082/api/v1/inventory",
+        return webClientBuilder.build().get()
+                .uri("http://inventory-service/api/v1/inventory",
                         uriBuilder -> uriBuilder.queryParam("skuCode", skuCodes).build())
                 .retrieve()
                 .bodyToMono(InventoryResponse[].class)
