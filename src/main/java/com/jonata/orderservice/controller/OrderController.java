@@ -3,6 +3,7 @@ package com.jonata.orderservice.controller;
 import com.jonata.orderservice.dto.OrderRequest;
 import com.jonata.orderservice.dto.OrderResponse;
 import com.jonata.orderservice.service.OrderService;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -20,9 +21,14 @@ public class OrderController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @CircuitBreaker(name = "inventory", fallbackMethod = "fallbackMethod")
     public String placeOrder(@RequestBody OrderRequest orderRequest) {
         orderService.placeOrder(orderRequest);
         return "Order placed successfully";
+    }
+
+    public String fallbackMethod(OrderRequest orderRequest, RuntimeException runtimeException) {
+        return "Oops! Something went wrong, please order later.";
     }
 
     @GetMapping
